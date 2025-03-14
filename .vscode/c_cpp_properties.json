@@ -4,13 +4,13 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/home/ian/cpp-projects/neural-xarm/include",
-                "/home/ian/cpp-projects/neural-xarm/thirdparty"
+                "../neural-xarm/include",
+                "../neural-xarm/thirdparty"
             ],
-            "defines": [],
+            "defines": ["STB_IMAGE_IMPLEMENTATION"],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
-            "cppStandard": "gnu++17",
+            "cppStandard": "gnu++20",
             "intelliSenseMode": "linux-gcc-x64"
         }
     ],
