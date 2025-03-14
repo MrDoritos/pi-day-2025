@@ -17,18 +17,34 @@ struct ui_image_t : public ui_element_t {
     :ui_element_t(window, xywh) {}
 };
 
+struct ui_pi_slider_t : public ui_slider_t {
+    ui_pi_slider_t(ui_slider_t &&sld):ui_slider_t(sld) {
+        this->arrange_text();
+    }
+
+    std::string vtos(ui_slider_v v) override {
+        const int buflen = 100;
+        char buf[buflen];
+        snprintf(buf, buflen, "%.3f", v);
+        return std::string(buf);
+    }
+};
+
 struct ui_circle_text_t : public ui_text_t {
     ui_circle_text_t(GLFWwindow *window, shaderProgram_t *program, texture_t *texture, glm::vec4 xywh)
     :ui_text_t(window, program, texture, xywh) {
         base_chars = 150.0;
         base_center_dist = 0.5;
         char_scale = 1.0;
+        reverse_dir = false;
+        radii_scale_1 = 1.0;
+        radii_scale_2 = 1.0;
         calc();
     }
 
     void calc() {
         base_dist = D_PI / base_chars;
-        base_angle = atan(base_dist / base_center_dist);
+        //base_angle = atan(base_dist / base_center_dist);
         modified = true;
     }
 
@@ -37,6 +53,9 @@ struct ui_circle_text_t : public ui_text_t {
     float base_center_dist;
     float base_angle;
     float char_scale;
+    bool reverse_dir;
+    float radii_scale_1;
+    float radii_scale_2;
 
     protected:
     bool mesh() override {
@@ -56,12 +75,19 @@ struct ui_circle_text_t : public ui_text_t {
         text_t *buffer = new text_t[count * 6];
 
         
-        float angle = 0.0;
-        for (int i = 0; i < count; i++)
+        float angle = base_angle;
+        
+        if (reverse_dir)
+        for (int i = 0; i < count - 1; i++)
             angle += atan(base_dist / ((angle / D_PI) * base_dist + base_center_dist));
 
-        //for (auto ch : string_buffer) {
-        for (auto it = string_buffer.end(); it != string_buffer.begin(); it--) {
+        auto b_it = string_buffer.begin();
+        auto e_it = string_buffer.end();
+
+        if (reverse_dir)
+            std::swap(b_it, e_it);
+
+        for (auto it = b_it; it != e_it;reverse_dir?it--:it++) {
             auto ch = *it;
             // Generate character verticies and texture coordinates
             glm::vec4 scr, tex;
@@ -75,7 +101,8 @@ struct ui_circle_text_t : public ui_text_t {
 
             // Rotate around center
             float center_dist = 0.0f;
-            float radii = (angle / D_PI) * base_dist + base_center_dist;
+            float radii = ((angle / D_PI) * base_dist + base_center_dist) * radii_scale_2;
+            float second_scale = abs(pow(radii, radii_scale_1) - radii + 1);
             float char_angle = atan(base_dist / radii);
 
             center_dist += radii;
@@ -94,7 +121,7 @@ struct ui_circle_text_t : public ui_text_t {
                 r -= ch_pos;
 
                 r = r * glm::mat2(m1);
-                r *= sqrt(2.0f) * char_scale;
+                r *= sqrt(2.0f) * char_scale * second_scale;
                 r += glm::vec2(center_dist, 0) * glm::mat2(m2);
                 
                 r += center_pos;
@@ -106,8 +133,7 @@ struct ui_circle_text_t : public ui_text_t {
             memcpy(&buffer[vertexCount], &tmp[0], cnt * sizeof tmp[0]);
             
             vertexCount += cnt;
-            //angle += char_angle;
-            angle -= char_angle;
+            angle += char_angle * (reverse_dir ? -1 : 1) * second_scale;
             currentX++;
         }
 
@@ -205,7 +231,7 @@ namespace program {
     }
 
     ui_slider_t *create_slider(glm::vec4 &XYWH, glm::vec4 &size, float value, float min = -1, float max = 1, const std::string &title = "", ui_slider_t::callback_t callback = ui_slider_t::callback_t(), bool limit = false, bool skip_text = false) {
-        ui_slider_t *slider = new ui_slider_t(window, text_program, text_texture, XYWH, min, max, value, title, limit, callback, skip_text);
+        ui_slider_t *slider = new ui_pi_slider_t(ui_slider_t(window, text_program, text_texture, XYWH, min, max, value, title, limit, callback, skip_text));
         XYWH += size;
         return slider;
     }
@@ -227,8 +253,11 @@ namespace program {
         ui_base->children = {
             create_slider(sliderPos,sliderSize,1,0,2,"Scale",[](st*m,sv v){circle_text->char_scale=v;circle_text->modified=true;}),
             create_slider(sliderPos,sliderSize,0.04,-0.2,0.2,"Dist",[](st*m,sv v){circle_text->base_dist=v;circle_text->modified=true;}),
-            create_slider(sliderPos,sliderSize,0.5,0,1,"Center",[](st*m,sv v){circle_text->base_center_dist=v;circle_text->calc();}),
+            create_slider(sliderPos,sliderSize,0.5,0,1,"Center",[](st*m,sv v){circle_text->base_center_dist=v;circle_text->modified=true;}),
             create_slider(sliderPos,sliderSize,150,20,500,"Chars",[](st*m,sv v){circle_text->base_chars=v;circle_text->calc();}),
+            create_slider(sliderPos,sliderSize,0.04,-0.2,0.2,"Angle",[](st*m,sv v){circle_text->base_angle=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,1,0,2,"Radii Scale 1",[](st*m,sv v){circle_text->radii_scale_1=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,1,0,2,"Radii Scale 2",[](st*m,sv v){circle_text->radii_scale_2=v;circle_text->modified=true;}),
             create_slider(sliderPos,sliderSize,0,-1,1,"MixFactor",[](st*m,sv v){text_program->mixFactor=v;}),
         };
 
@@ -251,7 +280,12 @@ namespace program {
         circle_text->load();
         ui_base->load();
 
-        circle_text->set_string(" 3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923460348610454326648213393607260249141273");
+        const char *pi300 = "3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923460348610454326648213393607260249141273";
+        const char *pi1000 = "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989";
+
+        circle_text->set_string(pi1000);
+
+        handle_buffersize(window, 800, 800);
 
         return glsuccess;
     }
