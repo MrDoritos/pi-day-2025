@@ -36,7 +36,7 @@ struct ui_circle_text_t : public ui_text_t {
         base_chars = 150.0;
         base_center_dist = 0.5;
         char_scale = 1.0;
-        reverse_dir = false;
+        reverse_dir = true;
         radii_scale_1 = 1.0;
         radii_scale_2 = 1.0;
         calc();
@@ -77,9 +77,25 @@ struct ui_circle_text_t : public ui_text_t {
         
         float angle = base_angle;
         
-        if (reverse_dir)
-        for (int i = 0; i < count - 1; i++)
-            angle += atan(base_dist / ((angle / D_PI) * base_dist + base_center_dist));
+        float max_radii = 0;
+
+        if (reverse_dir) {
+            do {
+                for (int i = 1; i < count; i++) {
+                    float radii = ((angle / D_PI) * base_dist + base_center_dist) * radii_scale_2;
+                    max_radii = radii;
+                    float char_angle = atan(base_dist / radii);
+                    float second_scale = abs(pow(radii, radii_scale_1) - radii + 1);
+                    angle += char_angle * second_scale;
+                }
+            } while (max_radii > .75);        
+        }
+
+        printf("angle: %f, max_radii: %f, radii_scale_1: %f, radii_scale_2: %f, base_dist: %f, base_center: %f\n",
+            angle, max_radii, radii_scale_1, radii_scale_2, base_dist, base_center_dist);
+
+
+        //angle += base_angle;
 
         auto b_it = string_buffer.begin();
         auto e_it = string_buffer.end();
@@ -87,8 +103,20 @@ struct ui_circle_text_t : public ui_text_t {
         if (reverse_dir)
             std::swap(b_it, e_it);
 
-        for (auto it = b_it; it != e_it;reverse_dir?it--:it++) {
+        auto it = b_it;
+
+        while (true) {
+            if (reverse_dir) {
+                if (it == e_it)
+                    break;
+                it--;
+            }
+            
             auto ch = *it;
+
+            if (!reverse_dir && it++ == e_it)
+                break;
+                
             // Generate character verticies and texture coordinates
             glm::vec4 scr, tex;
 
@@ -188,6 +216,9 @@ namespace program {
     void handle_keyboard(GLFWwindow *window, double delta_time) {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             hint_exit();
+
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+            circle_text->add_string("11223344556677889900");
     }
 
     void handle_buffersize(GLFWwindow *window, int width, int height) {
