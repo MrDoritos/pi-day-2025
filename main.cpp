@@ -8,9 +8,12 @@
 #include "ui_slider.h"
 #include "shader_program.h"
 #include "shader.h"
+#include "bigpi.h"
 
 constexpr float H_PI = 0.5f * M_PI;
 constexpr float D_PI = 2.0f * M_PI;
+const char *pi300 = "3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923460348610454326648213393607260249141273";
+const char *pi1000 = "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989";
 
 struct ui_image_t : public ui_element_t {
     ui_image_t(GLFWwindow *window, glm::vec4 xywh)
@@ -33,19 +36,26 @@ struct ui_pi_slider_t : public ui_slider_t {
 struct ui_circle_text_t : public ui_text_t {
     ui_circle_text_t(GLFWwindow *window, shaderProgram_t *program, texture_t *texture, glm::vec4 xywh)
     :ui_text_t(window, program, texture, xywh) {
-        base_chars = 150.0;
-        base_center_dist = 0.5;
+        //base_chars = 150.0;
+        base_chars = D_PI / 0.024;
+        base_dist = D_PI / base_chars;
+        base_center_dist = 0.178;
         char_scale = 1.0;
         reverse_dir = true;
-        radii_scale_1 = 1.0;
-        radii_scale_2 = 1.0;
-        calc();
+        radii_scale_1 = 0.483;
+        radii_scale_2 = 1.8;
+        modified = true;
     }
 
     void calc() {
         base_dist = D_PI / base_chars;
         //base_angle = atan(base_dist / base_center_dist);
         modified = true;
+    }
+
+    void add_char(const char ch) {
+        string_buffer += ch;
+        string_change();
     }
 
     float base_chars;
@@ -78,21 +88,45 @@ struct ui_circle_text_t : public ui_text_t {
         float angle = base_angle;
         
         float max_radii = 0;
+        int iter=0;
 
         if (reverse_dir) {
-            do {
+            while (true) {
                 for (int i = 1; i < count; i++) {
                     float radii = ((angle / D_PI) * base_dist + base_center_dist) * radii_scale_2;
-                    max_radii = radii;
+                    if (radii > max_radii)
+                        max_radii = radii;
                     float char_angle = atan(base_dist / radii);
                     float second_scale = abs(pow(radii, radii_scale_1) - radii + 1);
                     angle += char_angle * second_scale;
                 }
-            } while (max_radii > .75);        
+
+                //printf("%i: angle: %f, max_radii: %f, radii_scale_1: %f, radii_scale_2: %f, char_scale: %f, base_dist: %f, base_center: %f\n",
+                //    iter++, angle, max_radii, radii_scale_1, radii_scale_2, char_scale, base_dist, base_center_dist);
+
+                    //break;
+
+                float bdlim = 0.016;
+                float r2lim = 1.78;
+
+                if (max_radii < 1.4 || (base_dist < bdlim && radii_scale_2 <= r2lim))
+                    break;
+
+                float arb = 500.0;
+                
+                char_scale -= (0.1/arb);
+                if (base_dist > bdlim)
+                    base_dist -= (0.015/arb);
+                //radii_scale_1 -= (0.722/arb);
+                radii_scale_1 -= (0.4/arb);
+                //radii_scale_2 -= (0.810/arb);
+                if (radii_scale_2 > r2lim)
+                    radii_scale_2 -= (0.20/arb);
+                angle = 0;
+                max_radii = 0;
+            } 
         }
 
-        printf("angle: %f, max_radii: %f, radii_scale_1: %f, radii_scale_2: %f, base_dist: %f, base_center: %f\n",
-            angle, max_radii, radii_scale_1, radii_scale_2, base_dist, base_center_dist);
 
 
         //angle += base_angle;
@@ -217,8 +251,33 @@ namespace program {
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             hint_exit();
 
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-            circle_text->add_string("11223344556677889900");
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            static int p = 4;
+            static int digits = 1;
+            const char *pp = pi100000;
+            if (p < 99999-digits) {
+                char str[digits];
+                memcpy(&str[0], &pi100000[p], digits);
+                circle_text->add_string(std::string(&str[0], digits));
+                p += digits;
+
+                if (p > 100)
+                    digits = 2;
+                if (p > 500)
+                    digits = 3;
+                if (p > 3000)
+                    digits = 4;
+                //if (p > 2000)
+                //    digits = 5;
+                //if (p > 3000)
+                //    digits = 6;
+                if (p > 8000)
+                    digits = 10;
+                if (p > 16000)
+                    digits = 30;
+            } else
+                circle_text->add_char('0' + (rand() % 10));
+        }
     }
 
     void handle_buffersize(GLFWwindow *window, int width, int height) {
@@ -281,14 +340,15 @@ namespace program {
 
         ui_base = new ui_element_t(window, {-1.0,-1.0,1.0,1.0});
 
+        auto *ui = circle_text;
         ui_base->children = {
-            create_slider(sliderPos,sliderSize,1,0,2,"Scale",[](st*m,sv v){circle_text->char_scale=v;circle_text->modified=true;}),
-            create_slider(sliderPos,sliderSize,0.04,-0.2,0.2,"Dist",[](st*m,sv v){circle_text->base_dist=v;circle_text->modified=true;}),
-            create_slider(sliderPos,sliderSize,0.5,0,1,"Center",[](st*m,sv v){circle_text->base_center_dist=v;circle_text->modified=true;}),
-            create_slider(sliderPos,sliderSize,150,20,500,"Chars",[](st*m,sv v){circle_text->base_chars=v;circle_text->calc();}),
-            create_slider(sliderPos,sliderSize,0.04,-0.2,0.2,"Angle",[](st*m,sv v){circle_text->base_angle=v;circle_text->modified=true;}),
-            create_slider(sliderPos,sliderSize,1,0,2,"Radii Scale 1",[](st*m,sv v){circle_text->radii_scale_1=v;circle_text->modified=true;}),
-            create_slider(sliderPos,sliderSize,1,0,2,"Radii Scale 2",[](st*m,sv v){circle_text->radii_scale_2=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,ui->char_scale,0,2,"Scale",[](st*m,sv v){circle_text->char_scale=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,ui->base_dist,-0.2,0.2,"Dist",[](st*m,sv v){circle_text->base_dist=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,ui->base_center_dist,0,1,"Center",[](st*m,sv v){circle_text->base_center_dist=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,ui->base_chars,20,500,"Chars",[](st*m,sv v){circle_text->base_chars=v;circle_text->calc();}),
+            create_slider(sliderPos,sliderSize,ui->base_angle,-0.2,0.2,"Angle",[](st*m,sv v){circle_text->base_angle=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,ui->radii_scale_1,0,2,"Radii Scale 1",[](st*m,sv v){circle_text->radii_scale_1=v;circle_text->modified=true;}),
+            create_slider(sliderPos,sliderSize,ui->radii_scale_2,0,2,"Radii Scale 2",[](st*m,sv v){circle_text->radii_scale_2=v;circle_text->modified=true;}),
             create_slider(sliderPos,sliderSize,0,-1,1,"MixFactor",[](st*m,sv v){text_program->mixFactor=v;}),
         };
 
@@ -311,10 +371,8 @@ namespace program {
         circle_text->load();
         ui_base->load();
 
-        const char *pi300 = "3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117067982148086513282306647093844609550582231725359408128481117450284102701938521105559644622948954930381964428810975665933446128475648233786783165271201909145648566923460348610454326648213393607260249141273";
-        const char *pi1000 = "3.1415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679821480865132823066470938446095505822317253594081284811174502841027019385211055596446229489549303819644288109756659334461284756482337867831652712019091456485669234603486104543266482133936072602491412737245870066063155881748815209209628292540917153643678925903600113305305488204665213841469519415116094330572703657595919530921861173819326117931051185480744623799627495673518857527248912279381830119491298336733624406566430860213949463952247371907021798609437027705392171762931767523846748184676694051320005681271452635608277857713427577896091736371787214684409012249534301465495853710507922796892589235420199561121290219608640344181598136297747713099605187072113499999983729780499510597317328160963185950244594553469083026425223082533446850352619311881710100031378387528865875332083814206171776691473035982534904287554687311595628638823537875937519577818577805321712268066130019278766111959092164201989";
 
-        circle_text->set_string(pi1000);
+        circle_text->set_string("3.14");
 
         handle_buffersize(window, 800, 800);
 
@@ -343,9 +401,9 @@ int main() {
         text_program->use();
         text_program->set_m4("projection", glm::mat4(1.0) * program::perspective_matrix);
         circle_text->render();
-        pi_image->render();
-        text_program->set_m4("projection", glm::mat4(1.0));
-        ui_base->render();
+        //pi_image->render();
+        //text_program->set_m4("projection", glm::mat4(1.0));
+        //ui_base->render();
 
         glfwSwapBuffers(window);
         glfwPollEvents();
