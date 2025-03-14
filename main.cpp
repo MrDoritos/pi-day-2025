@@ -53,14 +53,21 @@ struct ui_circle_text_t : public ui_text_t {
             add_rect(&tmp[0], cnt, scr, tex);
 
             glm::mat4 matrix(1.0);
-            float center_dist = 0.5f;
+            float center_dist = 0.0f;
+            float base_dist = D_PI / 150.0f;
 
+            float base_center_dist = 0.5;
+            float base_angle = atan(base_dist / base_center_dist);
+            float radii = (angle / D_PI) * 0.05 + base_center_dist;
+
+            float char_angle = atan(base_dist / radii);
             int _angle_int = (1.0/D_PI) * angle;
 
             //if (angle > D_PI)
             //    center_dist += ((angle - M_PI) / D_PI) * 0.1;
             //if (_angle_int)
-            center_dist += ((angle - M_PI) / D_PI) * 0.05f;
+            //center_dist += ((angle - M_PI) / D_PI) * 0.05f;
+            center_dist += radii;
 
             glm::vec2 center_pos = (glm::vec2(XYWH) + glm::vec2(XYWH[2], XYWH[3])) * 0.5f;
             //matrix = glm::translate(matrix, glm::vec3(XYWH.x, XYWH.y, 0.0f));
@@ -80,22 +87,17 @@ struct ui_circle_text_t : public ui_text_t {
                 //coords -= glm::vec2(XYWH);
                 auto r = glm::vec2(glm::vec4(coords.x, coords.y, 0, 1) * matrix);// * glm::translate(matrix, glm::vec3(1.0,0,0));
                 //coords += glm::vec2(XYWH);
+                //r *= 1.27f;
+                r *= sqrt(2.0f);
                 r += glm::vec2(glm::vec4(center_dist,0,0,0) * m2);
                 r += offset;
-                tmp[i].coords() = r + ch_pos;
+                tmp[i].coords() = (r + ch_pos);
             }
 
             memcpy(&buffer[vertexCount], &tmp[0], cnt * sizeof tmp[0]);
             
             vertexCount += cnt;
-
-            float base_dist = D_PI / 75.0f;
-            float radii = (currentX / 75.0f) + 1.0;
-
-            float base_angle = atan(base_dist);
-            angle += base_angle * radii;
-            //angle += (D_PI/75) - (angle * (0.008/D_PI));
-
+            angle += char_angle;
             currentX++;
         }
 
